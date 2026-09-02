@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d0f1a">
-<title>Solar AC Control</title>
+<title>Solar AC Monitor</title>
 <style>
   :root{
     --bg:#0d0f1a; --card:#171a29; --card2:#1e2236; --text:#e8eaf2; --muted:#8a90a8;
@@ -55,32 +55,30 @@
   .ac-state .name{font-weight:600}
   .ac-state .meta{font-size:12px; color:var(--muted)}
 
-  /* Buttons */
+  /* Control buttons -> open GitHub workflow */
   .btn{
     width:100%; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:700;
     color:#08120a; background:linear-gradient(135deg,#37e087,#24b963); cursor:pointer;
     box-shadow:0 8px 20px rgba(47,211,117,.25); transition:transform .08s ease, opacity .2s;
-    margin-top:6px;
+    margin-top:6px; text-decoration:none; display:block; text-align:center;
   }
   .btn:active{transform:scale(.97)}
-  .btn:disabled{opacity:.5; cursor:not-allowed}
   .btn.off{color:#150707; background:linear-gradient(135deg,#ff7c85,#e0485a); box-shadow:0 8px 20px rgba(255,90,106,.2)}
-
-  .msg{font-size:13px; text-align:center; margin-top:14px; min-height:18px; color:var(--muted)}
-  .msg.ok{color:var(--green)} .msg.err{color:var(--red)}
+  .note{font-size:11px; color:var(--muted); text-align:center; margin-top:8px}
 
   .updated{text-align:center; color:var(--muted); font-size:12px; margin-top:18px}
+  .badge{display:inline-block; font-size:11px; padding:3px 8px; border-radius:10px; background:var(--card2); color:var(--muted); margin-top:10px}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="logo">Solar<span class="dot">·</span>AC</div>
-    <div class="status-chip" id="livechip">Connecting…</div>
+    <div class="status-chip" id="livechip">Loading…</div>
   </header>
 
   <h1>Battery Monitor</h1>
-  <p class="sub">Your solar battery &amp; AC control</p>
+  <p class="sub">Your solar battery &amp; AC status</p>
 
   <div class="card battery-wrap">
     <div class="battery-pct" id="soc">--</div>
@@ -104,79 +102,60 @@
       </div>
     </div>
 
-    <button class="btn" id="btnOn">Turn AC On</button>
-    <button class="btn off" id="btnOff" style="margin-top:10px">Turn AC Off</button>
-    <div class="msg" id="msg"></div>
+    <a class="btn" id="btnOn" target="_blank" rel="noopener">Turn AC On</a>
+    <a class="btn off" id="btnOff" target="_blank" rel="noopener" style="margin-top:10px">Turn AC Off</a>
+    <a class="btn" id="btnAuto" style="margin-top:10px; background:linear-gradient(135deg,#6ab0ff,#3d8bff); color:#06122a" target="_blank" rel="noopener">Run Check (auto)</a>
+    <div class="note">Buttons open GitHub to run the command. Sign in, then press the green "Run workflow" button.</div>
   </div>
 
   <div class="updated" id="updated">Updated: --</div>
+  <div class="updated"><span class="badge">Status refreshes every 10 min automatically</span></div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-let soc = null, acOn = null;
+const REPO = "aliwadah/solar-ac-monitor";
+const WORKFLOW = "https://github.com/" + REPO + "/actions/workflows/monitor.yml";
 
-function setBgClass(el, cls){
-  ['ok','err'].forEach(c=>el.classList.remove(c));
-  if (el.classList) el.classList.add(cls);
-}
+$('btnOn').href = WORKFLOW;
+$('btnOff').href = WORKFLOW;
+$('btnAuto').href = WORKFLOW;
 
-async function refresh(){
+async function loadStatus(){
   try{
-    const r = await fetch('/api/status');
+    const r = await fetch('status.json?t=' + Date.now());
     const d = await r.json();
-    soc = d.soc;
-    // power state text + dot
+    const soc = d.soc;
+
+    $('livechip').textContent = '● Live'; $('livechip').classList.add('live');
+
     if (d.ac_on === true){ $('acdot').className='ac-dot on'; $('acmeta').textContent='AC is ON'; }
     else if (d.ac_on === false){ $('acdot').className='ac-dot off'; $('acmeta').textContent='AC is OFF'; }
     else { $('acdot').className='ac-dot off'; $('acmeta').textContent='Status: unknown'; }
 
     if (soc != null){
-      $('soc').textContent = soc.toFixed(1) + '%';
+      $('soc').textContent = Number(soc).toFixed(1) + '%';
       const fill=$('bar'); fill.style.width = Math.min(100, soc) + '%';
       let color = 'var(--red)';
       if (soc >= d.on_threshold) color = 'var(--green)';
       else if (soc >= d.alert_threshold) color = 'var(--amber)';
       fill.style.background = color;
-      $('barmin').textContent = '50% (turn on) · below 50% turns AC off · alert at 30%';
+      $('barmin').textContent = '≥ ' + d.on_threshold + '% turns on · below ' + d.off_threshold + '% turns off · alert at ' + d.alert_threshold + '%';
     }
 
     $('ton').textContent = d.on_threshold + '%';
     $('toff').textContent = d.off_threshold + '%';
     $('talert').textContent = d.alert_threshold + '%';
-    $('updated').textContent = 'Updated: ' + (d.soc_updated || '--');
-
-    const live = $('livechip');
-    if (soc != null){ live.textContent = '● Live'; live.classList.add('live'); }
-    else { live.textContent = '● Offline'; live.classList.remove('live'); }
+    $('updated').textContent = 'Updated: ' + (d.updated || '--');
   }catch(e){
     $('livechip').textContent = '● Offline'; $('livechip').classList.remove('live');
-    $('updated').textContent = 'Cannot reach server';
+    $('updated').textContent = 'Waiting for first status update…';
+    $('barmin').textContent = 'The monitor posts its first reading soon; refresh in a few minutes.';
   }
 }
 
-async function act(which){
-  const btn = which==='on' ? $('btnOn') : $('btnOff');
-  btn.disabled = true; $('btnOn').disabled = true; $('btnOff').disabled = true;
-  $('msg').textContent = 'Working…';
-  setBgClass($('msg'),'');
-  try{
-    const r = await fetch('/api/' + which, {method:'POST'});
-    const d = await r.json();
-    $('msg').textContent = d.message || (d.ok? 'Done' : 'Failed');
-    setBgClass($('msg'), d.ok ? 'ok' : 'err');
-  }catch(e){
-    $('msg').textContent = 'Network error'; setBgClass($('msg'),'err');
-  }finally{
-    btn.disabled = false; $('btnOn').disabled = false; $('btnOff').disabled = false;
-    refresh();
-  }
-}
-
-$('btnOn').addEventListener('click', ()=>act('turn_on'));
-$('btnOff').addEventListener('click', ()=>act('turn_off'));
-refresh();
-setInterval(refresh, 15000);
+loadStatus();
+setInterval(loadStatus, 30000);
 </script>
 </body>
 </html>

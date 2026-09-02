@@ -300,6 +300,26 @@ class Tcl:
 
 
 # ---------------------------------------------------------------------------
+# Status file for the GitHub Pages dashboard
+# ---------------------------------------------------------------------------
+def write_status(soc, ac_on):
+    data = {
+        "soc": round(soc, 1),
+        "ac_on": ac_on,
+        "on_threshold": ON_THRESHOLD,
+        "off_threshold": OFF_THRESHOLD,
+        "alert_threshold": ALERT_THRESHOLD,
+        "updated": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+    }
+    try:
+        with open("status.json", "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        print("[status] wrote status.json")
+    except Exception as e:  # noqa: BLE001
+        print(f"[status] could not write status.json: {e}")
+
+
+# ---------------------------------------------------------------------------
 # Main logic
 # ---------------------------------------------------------------------------
 def main():
@@ -354,6 +374,9 @@ def main():
         tcl.set_power(False)
         send_notification("AC turned OFF automatically",
                           f"Battery reached {soc:.1f}% (< {OFF_THRESHOLD:.0f}%).")
+
+    # 6) write dashboard status (always, even if manual/ac set power changed state)
+    write_status(soc, tcl.get_power_switch())
 
     print("Done.")
     return 0

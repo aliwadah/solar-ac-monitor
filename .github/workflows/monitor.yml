@@ -20,6 +20,9 @@ concurrency:
   group: solar-monitor
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
@@ -48,3 +51,15 @@ jobs:
           NTFY_TOPIC: "${{ secrets.NTFY_TOPIC }}"
           TCL_ACTION: "${{ inputs.ac_action }}"
         run: python monitor.py
+
+      - name: Publish dashboard status to gh-pages
+        run: |
+          set -e
+          git config user.name "solar-ac-bot"
+          git config user.email "solar-ac-bot@users.noreply.github.com"
+          git checkout --orphan gh-pages 2>/dev/null || git checkout gh-pages
+          git reset --hard
+          cp -f index.html status.json ./
+          git add -f index.html status.json
+          git commit -m "dashboard update: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || echo "nothing to commit"
+          git push -f origin gh-pages
