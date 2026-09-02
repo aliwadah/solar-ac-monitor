@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: solar-ac-web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn solar_app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:8000
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: START_MONITOR
+        value: "false"
+      # Secrets are injected from Render dashboard; these keys are required.
+      - key: SISELI_USER
+        sync: false
+      - key: SISELI_PASSWORD
+        sync: false
+      - key: SISELI_DEVICE_ID
+        sync: false
+      - key: ON_THRESHOLD
+        sync: false
+      - key: OFF_THRESHOLD
+        sync: false
+      - key: ALERT_THRESHOLD
+        sync: false
+      - key: TCL_USER
+        sync: false
+      - key: TCL_PASSWORD
+        sync: false
+      - key: TCL_AC_NICKNAME
+        sync: false
+      - key: NTFY_SERVER
+        sync: false
+      - key: NTFY_TOPIC
+        sync: false

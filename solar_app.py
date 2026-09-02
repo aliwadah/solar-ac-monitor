@@ -107,8 +107,8 @@ def send_notification(title: str, body: str, priority: int = 3) -> None:
 # ---------------------------------------------------------------------------
 # Siseli (battery) API  -- IOT-Open signed auth
 # ---------------------------------------------------------------------------
-SISELI_APP_ID = "rBrTRfAPXz"
-_SISELI_APP_SECRET_ENC = "I4D0KRr2339z3pQ/at91V9BpFAOe54DaTafwSm6suIQ="
+SISELI_APP_ID = os.getenv("SISELI_APP_ID", "rBrTRfAPXz")
+_SISELI_APP_SECRET_ENC = os.getenv("SISELI_APP_SECRET_ENC", "I4D0KRr2339z3pQ/at91V9BpFAOe54DaTafwSm6suIQ=")
 
 
 def _decrypt_app_secret(app_id, enc):
@@ -364,18 +364,32 @@ def index():
 
 @app.route("/api/status")
 def api_status():
+    soc = state.soc
+    ac_on = state.ac_on
+    ac_online = None
+    err = state.last_error
+    try:
+        soc = read_battery_soc()
+        with state.lock:
+            state.soc = soc
+            state.soc_updated = time.strftime("%Y-%m-%d %H:%M:%S")
+            state.last_error = None
+    except Exception as e:  # noqa: BLE001
+        err = f"{e}"
+        with state.lock:
+            state.last_error = err
     with state.lock:
         return jsonify({
-            "soc": state.soc,
+            "soc": soc,
             "soc_updated": state.soc_updated,
-            "ac_on": state.ac_on,
+            "ac_on": ac_on,
             "ac_id": None,
             "last_ac_action": state.last_ac_action,
-            "error": state.last_error,
+            "error": err,
             "on_threshold": ON_THRESHOLD,
             "off_threshold": OFF_THRESHOLD,
             "alert_threshold": ALERT_THRESHOLD,
-            "ac_online": None,
+            "ac_online": ac_online,
         })
 
 
@@ -413,8 +427,19 @@ def api_turn_off():
         return jsonify({"ok": False, "message": f"AC control failed: {e}"}), 500
 
 
+def start_monitor_if_needed():
+    # Guard against starting multiple loops under gunicorn's multiple workers.
+    if os.getenv("START_MONITOR", "true").lower() in ("1", "true", "yes"):
+        with getattr(state, "monitor_lock", None) or threading.Lock():
+            if not getattr(state, "monitor_started", False):
+                threading.Thread(target=monitor_loop, daemon=True).start()
+                state.monitor_started = True
+
+
+start_monitor_if_needed()
+
+
 if __name__ == "__main__":
-    threading.Thread(target=monitor_loop, daemon=True).start()
     import socket
     host = socket.gethostbyname(socket.gethostname())
     log.info("Open on your phone: http://%s:8000", host)
