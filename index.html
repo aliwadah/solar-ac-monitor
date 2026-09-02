@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f1a">
+<title>Solar AC Control</title>
+<style>
+  :root{
+    --bg:#0d0f1a; --card:#171a29; --card2:#1e2236; --text:#e8eaf2; --muted:#8a90a8;
+    --green:#2fd375; --green-bg:rgba(47,211,117,.12);
+    --red:#ff5a6a; --red-bg:rgba(255,90,106,.12);
+    --amber:#ffc24b; --blue:#3d8bff;
+    --radius:20px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{
+    margin:0; background:linear-gradient(180deg,#0a0c15,#0d0f1a 60%);
+    color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;
+  }
+  .app{max-width:480px; margin:0 auto; padding:20px 18px 40px}
+  header{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px}
+  .logo{font-size:18px; font-weight:700; letter-spacing:.3px}
+  .logo .dot{color:var(--green)}
+  .status-chip{font-size:12px; padding:6px 12px; border-radius:20px; background:var(--card2); color:var(--muted)}
+  .status-chip.live{color:var(--green); background:var(--green-bg)}
+
+  h1{font-size:22px; margin:0 0 4px}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 20px}
+
+  .card{background:var(--card); border-radius:var(--radius); padding:22px; margin-bottom:16px;
+        box-shadow:0 8px 24px rgba(0,0,0,.35); border:1px solid #232840}
+
+  /* Battery gauge */
+  .battery-wrap{text-align:center}
+  .battery-pct{font-size:64px; font-weight:800; line-height:1; letter-spacing:-1px}
+  .battery-label{color:var(--muted); font-size:13px; margin-top:4px}
+  .bar{height:14px; border-radius:10px; background:#10131f; overflow:hidden; margin:18px 0 6px}
+  .bar-fill{height:100%; width:0%; border-radius:10px; transition:width .6s ease, background .4s}
+  .bar-min{color:var(--muted); font-size:11px; text-align:center}
+
+  /* Thresholds row */
+  .thresh{display:flex; gap:10px}
+  .thresh .t{flex:1; text-align:center; border-radius:14px; padding:12px 8px; background:var(--card2)}
+  .t .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px}
+  .t .val{font-size:20px; font-weight:700; margin-top:2px}
+  .t.on .val{color:var(--green)} .t.off .val{color:var(--amber)} .t.alert .val{color:var(--red)}
+
+  /* AC status */
+  .ac-state{display:flex; align-items:center; gap:12px}
+  .ac-dot{width:14px; height:14px; border-radius:50%; background:var(--red)}
+  .ac-dot.on{background:var(--green); box-shadow:0 0 12px var(--green)}
+  .ac-dot.off{background:var(--red)}
+  .ac-state .name{font-weight:600}
+  .ac-state .meta{font-size:12px; color:var(--muted)}
+
+  /* Buttons */
+  .btn{
+    width:100%; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:700;
+    color:#08120a; background:linear-gradient(135deg,#37e087,#24b963); cursor:pointer;
+    box-shadow:0 8px 20px rgba(47,211,117,.25); transition:transform .08s ease, opacity .2s;
+    margin-top:6px;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .btn.off{color:#150707; background:linear-gradient(135deg,#ff7c85,#e0485a); box-shadow:0 8px 20px rgba(255,90,106,.2)}
+
+  .msg{font-size:13px; text-align:center; margin-top:14px; min-height:18px; color:var(--muted)}
+  .msg.ok{color:var(--green)} .msg.err{color:var(--red)}
+
+  .updated{text-align:center; color:var(--muted); font-size:12px; margin-top:18px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">Solar<span class="dot">·</span>AC</div>
+    <div class="status-chip" id="livechip">Connecting…</div>
+  </header>
+
+  <h1>Battery Monitor</h1>
+  <p class="sub">Your solar battery &amp; AC control</p>
+
+  <div class="card battery-wrap">
+    <div class="battery-pct" id="soc">--</div>
+    <div class="battery-label">Battery State of Charge</div>
+    <div class="bar"><div class="bar-fill" id="bar"></div></div>
+    <div class="bar-min" id="barmin"></div>
+  </div>
+
+  <div class="thresh">
+    <div class="t on"><div class="label">Turn On ≥</div><div class="val" id="ton">--%</div></div>
+    <div class="t off"><div class="label">Turn Off &lt;</div><div class="val" id="toff">--%</div></div>
+    <div class="t alert"><div class="label">Alert &lt;</div><div class="val" id="talert">--%</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ac-state">
+      <div class="ac-dot" id="acdot"></div>
+      <div style="flex:1">
+        <div class="name" id="acname">Air Conditioner</div>
+        <div class="meta" id="acmeta">Status: unknown</div>
+      </div>
+    </div>
+
+    <button class="btn" id="btnOn">Turn AC On</button>
+    <button class="btn off" id="btnOff" style="margin-top:10px">Turn AC Off</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="updated" id="updated">Updated: --</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let soc = null, acOn = null;
+
+function setBgClass(el, cls){
+  ['ok','err'].forEach(c=>el.classList.remove(c));
+  if (el.classList) el.classList.add(cls);
+}
+
+async function refresh(){
+  try{
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    soc = d.soc;
+    // power state text + dot
+    if (d.ac_on === true){ $('acdot').className='ac-dot on'; $('acmeta').textContent='AC is ON'; }
+    else if (d.ac_on === false){ $('acdot').className='ac-dot off'; $('acmeta').textContent='AC is OFF'; }
+    else { $('acdot').className='ac-dot off'; $('acmeta').textContent='Status: unknown'; }
+
+    if (soc != null){
+      $('soc').textContent = soc.toFixed(1) + '%';
+      const fill=$('bar'); fill.style.width = Math.min(100, soc) + '%';
+      let color = 'var(--red)';
+      if (soc >= d.on_threshold) color = 'var(--green)';
+      else if (soc >= d.alert_threshold) color = 'var(--amber)';
+      fill.style.background = color;
+      $('barmin').textContent = '50% (turn on) · below 50% turns AC off · alert at 30%';
+    }
+
+    $('ton').textContent = d.on_threshold + '%';
+    $('toff').textContent = d.off_threshold + '%';
+    $('talert').textContent = d.alert_threshold + '%';
+    $('updated').textContent = 'Updated: ' + (d.soc_updated || '--');
+
+    const live = $('livechip');
+    if (soc != null){ live.textContent = '● Live'; live.classList.add('live'); }
+    else { live.textContent = '● Offline'; live.classList.remove('live'); }
+  }catch(e){
+    $('livechip').textContent = '● Offline'; $('livechip').classList.remove('live');
+    $('updated').textContent = 'Cannot reach server';
+  }
+}
+
+async function act(which){
+  const btn = which==='on' ? $('btnOn') : $('btnOff');
+  btn.disabled = true; $('btnOn').disabled = true; $('btnOff').disabled = true;
+  $('msg').textContent = 'Working…';
+  setBgClass($('msg'),'');
+  try{
+    const r = await fetch('/api/' + which, {method:'POST'});
+    const d = await r.json();
+    $('msg').textContent = d.message || (d.ok? 'Done' : 'Failed');
+    setBgClass($('msg'), d.ok ? 'ok' : 'err');
+  }catch(e){
+    $('msg').textContent = 'Network error'; setBgClass($('msg'),'err');
+  }finally{
+    btn.disabled = false; $('btnOn').disabled = false; $('btnOff').disabled = false;
+    refresh();
+  }
+}
+
+$('btnOn').addEventListener('click', ()=>act('turn_on'));
+$('btnOff').addEventListener('click', ()=>act('turn_off'));
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

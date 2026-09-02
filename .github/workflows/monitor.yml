@@ -1,0 +1,50 @@
+name: Solar AC Monitor
+
+on:
+  schedule:
+    # Runs every 10 minutes: auto turn-off the AC (if <50% while on) and low-battery alerts.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      ac_action:
+        description: 'Manual AC action: on / off / auto'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - on
+          - off
+
+concurrency:
+  group: solar-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run battery monitor
+        env:
+          SISELI_USER: ${{ secrets.SISELI_USER }}
+          SISELI_PASSWORD: ${{ secrets.SISELI_PASSWORD }}
+          SISELI_DEVICE_ID: ${{ secrets.SISELI_DEVICE_ID }}
+          ON_THRESHOLD: ${{ vars.ON_THRESHOLD }}
+          OFF_THRESHOLD: ${{ vars.OFF_THRESHOLD }}
+          ALERT_THRESHOLD: ${{ vars.ALERT_THRESHOLD }}
+          TCL_USER: ${{ secrets.TCL_USER }}
+          TCL_PASSWORD: ${{ secrets.TCL_PASSWORD }}
+          TCL_AC_NICKNAME: "${{ secrets.TCL_AC_NICKNAME }}"
+          NTFY_SERVER: "${{ secrets.NTFY_SERVER }}"
+          NTFY_TOPIC: "${{ secrets.NTFY_TOPIC }}"
+          TCL_ACTION: "${{ inputs.ac_action }}"
+        run: python monitor.py

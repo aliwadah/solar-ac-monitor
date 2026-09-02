@@ -1,0 +1,5 @@
+httpx>=0.27
+boto3>=1.34
+PyJWT>=2.8
+pycryptodome>=3.20
+python-dotenv>=1.0
