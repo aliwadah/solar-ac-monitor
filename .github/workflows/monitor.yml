@@ -10,11 +10,7 @@ on:
         description: 'Manual AC action: on / off / auto'
         required: false
         default: 'auto'
-        type: choice
-        options:
-          - auto
-          - on
-          - off
+        type: string
 
 concurrency:
   group: solar-monitor
